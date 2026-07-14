@@ -4,7 +4,6 @@ import requests
 from google import genai
 from google.genai import types
 import edge_tts
-from PIL import Image
 
 def viral_senaryo_ve_gorsel_promptu_ureti():
     """Gemini API kullanarak viral Shorts senaryosu ve buna uygun görsel promptu üretir."""
@@ -22,7 +21,7 @@ def viral_senaryo_ve_gorsel_promptu_ureti():
         "Bana tam olarak şu JSON formatında cevap ver (başka hiçbir metin ekleme, sadece JSON dön):\n"
         "{\n"
         '  "senaryo": "İlk 3 saniyesi kancalı, akıcı, sonu yorum yapmaya davet eden Türkçe seslendirme metni.",\n'
-        '  "gorsel_promptu": "Görsel üretim modeli (Stable Diffusion) için İngilizce, dikey formatta (9:16), fotogerçekçi, dramatik ışıklandırmalı, konuyla ilgili detaylı görsel üretim promptu."\n'
+        '  "gorsel_promptu": "A dramatic, photorealistic vertical (9:16) image depicting the scene, highly detailed, cinematic lighting, 8k resolution"\n'
         "}"
     )
 
@@ -33,50 +32,48 @@ def viral_senaryo_ve_gorsel_promptu_ureti():
             config=types.GenerateContentConfig(
                 system_instruction=sistem_talimati,
                 temperature=0.85,
-                response_mime_type="application/json" # Kesinlikle JSON dönmesini zorunlu kılıyoruz
+                response_mime_type="application/json"
             )
         )
-        # Gelen JSON cevabını Python sözlüğüne çeviriyoruz
         import json
         data = json.loads(response.text)
         return data["senaryo"], data["gorsel_promptu"]
     except Exception as e:
-        print(f"Gemini API Hatası: {e}")
+        print(f"Gemini API Hatası (Metin): {e}")
         return None, None
 
 def yapay_zeka_gorseli_uret(prompt):
-    """Ücretsiz Hugging Face API kullanarak dikey formatta görsel üretir."""
-    print(f"🎨 Görsel üretiliyor... Prompt: {prompt}")
-    
-    # Hugging Face üzerinde ücretsiz ve harika çalışan Stable Diffusion XL modeli
-    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-    
-    # GitHub Actions sırrı (İsteğe bağlı, token eklemesen de bazen kota dahilinde çalışır ama token ile garanti olur)
-    headers = {}
-    hf_token = os.environ.get("HF_TOKEN")
-    if hf_token:
-        headers = {"Authorization": f"Bearer {hf_token}"}
-        
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "width": 576,  # 9:16 dikey oranına yakın çözünürlükler
-            "height": 1024
-        }
-    }
-    
+    """Google Gemini Imagen 3 kullanarak dikey formatta görsel üretir."""
+    print(f"🎨 Gemini Imagen ile görsel üretiliyor... Prompt: {prompt}")
+    api_key = os.environ.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
+
     try:
-        response = requests.post(API_URL, headers=headers, json=payload)
-        if response.status_code == 200:
+        # Gemini'ın en güçlü görsel üretim modelini çağırıyoruz
+        result = client.models.generate_images(
+            model='imagen-3.0-generate-002',
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                output_mime_type="image/jpeg",
+                aspect_ratio="9:16", # Tam dikey Shorts formatı!
+                person_generation="ALLOW_ADULT",
+            )
+        )
+        
+        # Üretilen görseli kaydediyoruz
+        for generated_image in result.generated_images:
+            import bytesio_or_similar
+            # Base64 veya doğrudan bytes olarak gelen görseli yazıyoruz
+            import base64
+            image_bytes = base64.b64decode(generated_image.image.image_bytes)
             with open("arka_plan.jpg", "wb") as f:
-                f.write(response.content)
-            print("📸 Özel yapay zeka görseli 'arka_plan.jpg' olarak kaydedildi.")
-            return True
-        else:
-            print(f"Görsel üretilemedi, Hata Kodu: {response.status_code}")
-            return False
+                f.write(image_bytes)
+                
+        print("📸 Özel yapay zeka görseli Gemini Imagen ile 'arka_plan.jpg' olarak başarıyla kaydedildi.")
+        return True
     except Exception as e:
-        print(f"Görsel üretme hatası: {e}")
+        print(f"Gemini Görsel Üretme Hatası: {e}")
         return False
 
 async def metni_seslendir(metin, cikis_ses_yolu):
@@ -90,23 +87,41 @@ def hazir_muzik_indir():
     """Arka plana koymak için telifsiz kısa bir fon müziği indirir."""
     print("📥 Fon müziği indiriliyor...")
     muzik_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-    with open("muzik.mp3", "wb") as f:
-        f.write(requests.get(muzik_url).content)
-    print("✅ Müzik hazır.")
+    try:
+        response = requests.get(muzik_url, timeout=15)
+        with open("muzik.mp3", "wb") as f:
+            f.write(response.content)
+        print("✅ Müzik hazır.")
+    except Exception as e:
+        print(f"Müzik indirme hatası: {e}")
 
 def videoyu_olustur():
     """Görseli, sesi ve müziği birleştirerek dikey video üretir (FFmpeg)."""
     print("🎬 Video montajı (Görsel + Ses + Müzik) başlıyor...")
     
-    # Bu komut: Tek bir görseli (arka_plan.jpg), ses dosyasının (ses.mp3) süresi kadar uzatır,
-    # arkaya fon müziğini kısık sesle ekler ve dikey mp4 video üretir.
-    komut = (
-        "ffmpeg -y -loop 1 -i arka_plan.jpg -i muzik.mp3 -i ses.mp3 "
-        "-filter_complex \"[1:a]volume=0.12[bg]; [2:a]volume=1.0[voice]; [bg][voice]amix=inputs=2:duration=shortest[a]\" "
-        "-map 0:v -map \"[a]\" -c:v libx264 -tune stillimage -pix_fmt yuv420p -shortest final_shorts.mp4"
-    )
+    # Dosyaların varlığını kontrol et
+    if not os.path.exists("arka_plan.jpg") or not os.path.exists("ses.mp3"):
+        print("❌ Eksik dosya var, video birleştirilemiyor!")
+        return
+
+    # Müzik yoksa sadece sesle birleştir, varsa ikisini miksle
+    if os.path.exists("muzik.mp3"):
+        komut = (
+            "ffmpeg -y -loop 1 -i arka_plan.jpg -i muzik.mp3 -i ses.mp3 "
+            "-filter_complex \"[1:a]volume=0.12[bg]; [2:a]volume=1.0[voice]; [bg][voice]amix=inputs=2:duration=shortest[a]\" "
+            "-map 0:v -map \"[a]\" -c:v libx264 -tune stillimage -pix_fmt yuv420p -shortest final_shorts.mp4"
+        )
+    else:
+        komut = (
+            "ffmpeg -y -loop 1 -i arka_plan.jpg -i ses.mp3 "
+            "-c:v libx264 -tune stillimage -c:a aac -pix_fmt yuv420p -shortest final_shorts.mp4"
+        )
+        
     os.system(komut)
-    print("🎉 VİDEO HAZIR! 'final_shorts.mp4' başarıyla üretildi.")
+    if os.path.exists("final_shorts.mp4"):
+        print("🎉 VİDEO HAZIR! 'final_shorts.mp4' başarıyla üretildi.")
+    else:
+        print("❌ FFmpeg video oluşturamadı.")
 
 async def ana_akis():
     print("🤖 1. ADIM: Bilgi ve Görsel Konsepti üretiliyor...")
