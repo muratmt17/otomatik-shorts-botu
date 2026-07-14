@@ -2,7 +2,6 @@ import os
 import asyncio
 import requests
 import json
-import base64
 from google import genai
 from google.genai import types
 import edge_tts
@@ -23,7 +22,7 @@ def viral_senaryo_ve_gorsel_promptu_ureti():
         "Bana tam olarak şu JSON formatında cevap ver (başka hiçbir metin ekleme, sadece JSON dön):\n"
         "{\n"
         '  "senaryo": "İlk 3 saniyesi kancalı, akıcı, sonu yorum yapmaya davet eden Türkçe seslendirme metni.",\n'
-        '  "gorsel_promptu": "A dramatic, photorealistic vertical (9:16) image depicting the scene, highly detailed, cinematic lighting, 8k resolution"\n'
+        '  "gorsel_promptu": "Cinematic lighting, photorealistic, 8k resolution, detailed scene description without commas"\n'
         "}"
     )
 
@@ -44,38 +43,27 @@ def viral_senaryo_ve_gorsel_promptu_ureti():
         return None, None
 
 def yapay_zeka_gorseli_uret(prompt):
-    """Google Gemini Imagen API kullanarak dikey formatta görsel üretir."""
-    print(f"🎨 Gemini Imagen ile görsel üretiliyor... Prompt: {prompt}")
-    api_key = os.environ.get("GEMINI_API_KEY")
+    """Ücretsiz ve sınırsız Pollinations AI motorunu kullanarak 9:16 dikey görsel üretir."""
+    # Boşlukları URL formatına uygun hale getiriyoruz
+    temiz_prompt = requests.utils.quote(prompt)
     
-    # En garantili ve kararlı çalışan global v1 API endpoint'i
-    url = f"https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-002:predict?key={api_key}"
+    # Tam dikey format (720x1280) ve en kararlı çalışan Flux/Flux-Anime yapay zeka görsel motoru
+    url = f"https://image.pollinations.ai/p/{temiz_prompt}?width=720&height=1280&nologo=true&private=true"
     
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "instances": [{"prompt": prompt}],
-        "parameters": {
-            "sampleCount": 1,
-            "outputMimeType": "image/jpeg",
-            "aspectRatio": "9:16"
-        }
-    }
-
+    print(f"🎨 Görsel motoru tetikleniyor... Bağlantı: {url}")
+    
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        if response.status_code == 200:
-            result = response.json()
-            image_base64 = result['predictions'][0]['bytesBase64Encoded']
-            image_bytes = base64.b64decode(image_base64)
+        response = requests.get(url, timeout=40)
+        if response.status_code == 200 and len(response.content) > 5000:
             with open("arka_plan.jpg", "wb") as f:
-                f.write(image_bytes)
-            print("📸 Özel yapay zeka görseli Gemini Imagen ile 'arka_plan.jpg' olarak başarıyla kaydedildi.")
+                f.write(response.content)
+            print("📸 Konuya özel harika dikey görsel 'arka_plan.jpg' olarak kaydedildi.")
             return True
         else:
-            print(f"Görsel API Hatası (Kod {response.status_code}): {response.text}")
+            print(f"Görsel motorundan geçersiz yanıt döndü. Kod: {response.status_code}")
             return False
     except Exception as e:
-        print(f"Görsel üretme sırasında beklenmeyen hata: {e}")
+        print(f"Görsel indirilirken hata oluştu: {e}")
         return False
 
 async def metni_seslendir(metin, cikis_ses_yolu):
@@ -102,10 +90,9 @@ def videoyu_olustur():
     print("🎬 Video montajı (Görsel + Ses + Müzik) başlıyor...")
     
     if not os.path.exists("arka_plan.jpg") or not os.path.exists("ses.mp3"):
-        print("❌ Eksik kaynak dosyası (arka_plan veya ses) olduğundan video birleştirilemedi!")
+        print("❌ Eksik kaynak dosyası olduğundan video birleştirilemedi!")
         return
 
-    # FFmpeg için en kararlı, kare kaçırmayan ve dikey video formatına uygun render komutu
     if os.path.exists("muzik.mp3"):
         komut = (
             "ffmpeg -y -loop 1 -framerate 25 -i arka_plan.jpg -i muzik.mp3 -i ses.mp3 "
@@ -120,11 +107,11 @@ def videoyu_olustur():
         
     os.system(komut)
     
-    if os.path.exists("final_shorts.mp4") and os.path.getsize("final_shorts.mp4") > 50000:
+    if os.path.exists("final_shorts.mp4") and os.path.getsize("final_shorts.mp4") > 100000:
         size_mb = os.path.getsize("final_shorts.mp4") / (1024 * 1024)
         print(f"🎉 VİDEO BAŞARIYLA ÜRETİLDİ! Dosya boyutu: {size_mb:.2f} MB.")
     else:
-        print("❌ FFmpeg gerçek bir video dosyası oluşturamadı veya dosya çok küçük/boş.")
+        print("❌ FFmpeg gerçek bir video dosyası oluşturamadı veya dosya boş.")
 
 async def ana_akis():
     print("🤖 1. ADIM: Bilgi ve Görsel Konsepti üretiliyor...")
@@ -140,7 +127,7 @@ async def ana_akis():
     print("🤖 2. ADIM: Konuya özel dikey görsel üretiliyor...")
     gorsel_durum = yapay_zeka_gorseli_uret(gorsel_prompt)
     if not gorsel_durum:
-        print("❌ Görsel üretilemediği için işlem durduruldu.")
+        print("❌ Görsel düzeneği kurulamadı.")
         return
     
     print("🤖 3. ADIM: Seslendirme yapılıyor...")
