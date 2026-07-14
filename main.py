@@ -43,34 +43,46 @@ def viral_senaryo_ve_gorsel_promptu_ureti():
         return None, None
 
 def yapay_zeka_gorseli_uret(prompt):
-    """Google Gemini Imagen 3 kullanarak dikey formatta görsel üretir."""
+    """Google Gemini Imagen API kullanarak dikey formatta görsel üretir."""
     print(f"🎨 Gemini Imagen ile görsel üretiliyor... Prompt: {prompt}")
     api_key = os.environ.get("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
 
     try:
-        # Gemini'ın en güncel görsel üretim modelini çağırıyoruz
+        # En güncel ve genel erişime açık Imagen 3 ana model adını kullanıyoruz
         result = client.models.generate_images(
-            model='imagen-3.0-generate-002',
+            model='imagen-3.0-generate-002', 
             prompt=prompt,
             config=types.GenerateImagesConfig(
                 number_of_images=1,
                 output_mime_type="image/jpeg",
-                aspect_ratio="9:16", # Tam dikey Shorts formatı
+                aspect_ratio="9:16",
                 person_generation="ALLOW_ADULT",
             )
         )
         
-        # Üretilen görselin saf verisini (bytes) doğrudan kaydediyoruz
         for generated_image in result.generated_images:
             with open("arka_plan.jpg", "wb") as f:
                 f.write(generated_image.image.image_bytes)
                 
-        print("📸 Özel yapay zeka görseli Gemini Imagen ile 'arka_plan.jpg' olarak başarıyla kaydedildi.")
+        print("📸 Özel yapay zeka görseli başarıyla 'arka_plan.jpg' olarak kaydedildi.")
         return True
     except Exception as e:
         print(f"Gemini Görsel Üretme Hatası: {e}")
-        return False
+        print("⚠️ Görsel üretilemediği için yedek (standart) bir görsel oluşturuluyor...")
+        
+        # Eğer API modeli bölge/hesap kısıtlamasından dolayı yine reddederse, 
+        # sistemin çökmemesi için internetten hemen telifsiz dikey şık bir görsel çekiyoruz.
+        try:
+            yedek_url = "https://images.pexels.com/photos/281260/pexels-photo-281260.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500"
+            response = requests.get(yedek_url, timeout=15)
+            with open("arka_plan.jpg", "wb") as f:
+                f.write(response.content)
+            print("ℹ️ Yedek görsel başarıyla indirildi. Sistem devam ediyor!")
+            return True
+        except Exception as yedek_hata:
+            print(f"Yedek görsel de alınamadı: {yedek_hata}")
+            return False
 
 async def metni_seslendir(metin, cikis_ses_yolu):
     """Metni yapay zeka sesiyle Türkçe olarak seslendirir."""
@@ -131,7 +143,7 @@ async def ana_akis():
     print("🤖 2. ADIM: Konuya özel görsel üretiliyor...")
     gorsel_durum = yapay_zeka_gorseli_uret(gorsel_prompt)
     if not gorsel_durum:
-        print("❌ Görsel üretilemediği için devam edilemiyor.")
+        print("❌ Görsel düzeneği kurulamadı. Devam edilemiyor.")
         return
     
     print("🤖 3. ADIM: Seslendirme yapılıyor...")
