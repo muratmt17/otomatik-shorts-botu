@@ -1,4 +1,3 @@
-google-genai
+google-generativeai
 edge-tts
 requests
-pillow
