@@ -1,0 +1,49 @@
+  name: Günlük Otomatik Shorts Üretici
+
+# Bu robotun ne zaman çalışacağını belirliyoruz
+on:
+  schedule:
+    # Her gün Türkiye saatiyle sabah 09:00'da çalışır (UTC saatine göre 06:00'dır)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Bu satır, istediğimiz an web sitesinden "Manuel Çalıştır" butonuna basmamızı sağlar (Test için harika!)
+
+jobs:
+  video-uretim-sureci:
+    runs-on: ubuntu-latest # Robotumuz ücretsiz bir Ubuntu sunucusunda çalışacak
+
+    steps:
+    # 1. Adım: GitHub'daki kodlarımızı sunucuya indirir
+    - name: Kodları İndir
+      uses: actions/checkout@v4
+
+    # 2. Adım: Sunucuya Python kurar
+    - name: Python Kurulumu
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    # 3. Adım: Video birleştirmek için gerekli olan FFmpeg aracını sunucuya kurar
+    - name: FFmpeg Kurulumu
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+
+    # 4. Adım: requirements.txt dosyasındaki kütüphaneleri yükler
+    - name: Bağımlılıkları Yükle
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # 5. Adım: main.py kodumuzu çalıştırır ve kasaya kilitlediğimiz şifreleri koda aktarır
+    - name: Sistemi Çalıştır ve Videoyu Üret
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      run: python main.py
+
+    # 6. Adım: Üretilen "final_shorts.mp4" videosunu GitHub'a kaydeder (İndirip izleyebilmemiz için)
+    - name: Üretilen Videoyu Kaydet (Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: gunluk-shorts-videosu
+        path: final_shorts.mp4
