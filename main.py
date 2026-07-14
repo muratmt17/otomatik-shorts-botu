@@ -1,22 +1,24 @@
 import os
 import asyncio
 import requests
-import google.generativeai as genai
 import json
+import base64
+from google import genai
+from google.genai import types
 import edge_tts
 
 def viral_senaryo_ve_gorsel_promptu_ureti():
     """Gemini API kullanarak viral Shorts senaryosu ve buna uygun görsel promptu üretir."""
     api_key = os.environ.get("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
-    
-    # En stabil model olan gemini-1.5-flash kullanıyoruz
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    client = genai.Client(api_key=api_key)
 
-    prompt = (
+    sistem_talimati = (
         "Sen profesyonel bir YouTube Shorts üreticisisin. Görevin; tarih, bilim veya "
         "psikoloji hakkında şoke edici, maksimum 25-30 saniyelik bir senaryo yazmak "
-        "ve bu senaryoyu en iyi temsil edecek dikey bir görsel üretimi için İngilizce prompt hazırlamaktır.\n\n"
+        "ve bu senaryoyu en iyi temsil edecek dikey bir görsel üretimi için İngilizce prompt hazırlamaktır."
+    )
+
+    kullanici_promptu = (
         "Bana bugün için viral olacak şaşırtıcı bir bilgi seç.\n"
         "Bana tam olarak şu JSON formatında cevap ver (başka hiçbir metin ekleme, sadece JSON dön):\n"
         "{\n"
@@ -26,33 +28,32 @@ def viral_senaryo_ve_gorsel_promptu_ureti():
     )
 
     try:
-        response = model.generate_content(prompt)
-        # Markdown kod bloklarını temizle (bazen ```json ... ``` şeklinde gelebiliyor)
-        temiz_text = response.text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(temiz_text)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=kullanici_promptu,
+            config=types.GenerateContentConfig(
+                system_instruction=sistem_talimati,
+                temperature=0.85,
+                response_mime_type="application/json"
+            )
+        )
+        data = json.loads(response.text)
         return data["senaryo"], data["gorsel_promptu"]
     except Exception as e:
         print(f"Gemini API Hatası (Metin): {e}")
         return None, None
 
 def yapay_zeka_gorseli_uret(prompt):
-    """Google Gemini Imagen 3 kullanarak dikey formatta görsel üretir."""
+    """Google Gemini Imagen API kullanarak dikey formatta görsel üretir."""
     print(f"🎨 Gemini Imagen ile görsel üretiliyor... Prompt: {prompt}")
     api_key = os.environ.get("GEMINI_API_KEY")
     
-    # Imagen 3 API uç noktası (Direct REST call - En garantili yöntem)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={api_key}"
+    # En garantili ve kararlı çalışan global v1 API endpoint'i
+    url = f"https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-002:predict?key={api_key}"
     
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
+    headers = {"Content-Type": "application/json"}
     payload = {
-        "instances": [
-            {
-                "prompt": prompt
-            }
-        ],
+        "instances": [{"prompt": prompt}],
         "parameters": {
             "sampleCount": 1,
             "outputMimeType": "image/jpeg",
@@ -64,8 +65,6 @@ def yapay_zeka_gorseli_uret(prompt):
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         if response.status_code == 200:
             result = response.json()
-            # Gelen görsel verisini (Base64) dosyaya yazıyoruz
-            import base64
             image_base64 = result['predictions'][0]['bytesBase64Encoded']
             image_bytes = base64.b64decode(image_base64)
             with open("arka_plan.jpg", "wb") as f:
@@ -106,27 +105,26 @@ def videoyu_olustur():
         print("❌ Eksik kaynak dosyası (arka_plan veya ses) olduğundan video birleştirilemedi!")
         return
 
-    # FFmpeg için en güvenli, uyumlu ve yüksek sıkıştırmalı render komutu
-    # Ses dosyasının uzunluğu boyunca tek görseli video karesi olarak uzatır.
+    # FFmpeg için en kararlı, kare kaçırmayan ve dikey video formatına uygun render komutu
     if os.path.exists("muzik.mp3"):
         komut = (
             "ffmpeg -y -loop 1 -framerate 25 -i arka_plan.jpg -i muzik.mp3 -i ses.mp3 "
             "-filter_complex \"[1:a]volume=0.08[bg]; [2:a]volume=1.0[voice]; [bg][voice]amix=inputs=2:duration=shortest[a]\" "
-            "-map 0:v -map \"[a]\" -c:v libx264 -pix_fmt yuv420p -shortest final_shorts.mp4"
+            "-map 0:v -map \"[a]\" -c:v libx264 -pix_fmt yuv420p -vf \"scale=720:1280\" -shortest final_shorts.mp4"
         )
     else:
         komut = (
             "ffmpeg -y -loop 1 -framerate 25 -i arka_plan.jpg -i ses.mp3 "
-            "-map 0:v -map 1:a -c:v libx264 -pix_fmt yuv420p -shortest final_shorts.mp4"
+            "-map 0:v -map 1:a -c:v libx264 -pix_fmt yuv420p -vf \"scale=720:1280\" -shortest final_shorts.mp4"
         )
         
     os.system(komut)
     
-    if os.path.exists("final_shorts.mp4") and os.path.getsize("final_shorts.mp4") > 1000:
-        size_kb = os.path.getsize("final_shorts.mp4") / 1024
-        print(f"🎉 VİDEO BAŞARIYLA ÜRETİLDİ! Dosya boyutu: {size_kb:.2f} KB.")
+    if os.path.exists("final_shorts.mp4") and os.path.getsize("final_shorts.mp4") > 50000:
+        size_mb = os.path.getsize("final_shorts.mp4") / (1024 * 1024)
+        print(f"🎉 VİDEO BAŞARIYLA ÜRETİLDİ! Dosya boyutu: {size_mb:.2f} MB.")
     else:
-        print("❌ FFmpeg gerçek bir video dosyası oluşturamadı veya dosya boş.")
+        print("❌ FFmpeg gerçek bir video dosyası oluşturamadı veya dosya çok küçük/boş.")
 
 async def ana_akis():
     print("🤖 1. ADIM: Bilgi ve Görsel Konsepti üretiliyor...")
@@ -151,7 +149,7 @@ async def ana_akis():
     print("🤖 4. ADIM: Müzik hazırlanıyor...")
     hazir_muzik_indir()
     
-    print("🤖 5. ADIM: Video sentezleniyor...")
+    print("🤖 5. ADIM: Video Sentezleniyor (FFmpeg)...")
     videoyu_olustur()
 
 if __name__ == "__main__":
