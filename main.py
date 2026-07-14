@@ -49,26 +49,22 @@ def yapay_zeka_gorseli_uret(prompt):
     client = genai.Client(api_key=api_key)
 
     try:
-        # Gemini'ın en güçlü görsel üretim modelini çağırıyoruz
+        # Gemini'ın en güncel görsel üretim modelini çağırıyoruz
         result = client.models.generate_images(
             model='imagen-3.0-generate-002',
             prompt=prompt,
             config=types.GenerateImagesConfig(
                 number_of_images=1,
                 output_mime_type="image/jpeg",
-                aspect_ratio="9:16", # Tam dikey Shorts formatı!
+                aspect_ratio="9:16", # Tam dikey Shorts formatı
                 person_generation="ALLOW_ADULT",
             )
         )
         
-        # Üretilen görseli kaydediyoruz
+        # Üretilen görselin saf verisini (bytes) doğrudan kaydediyoruz
         for generated_image in result.generated_images:
-            import bytesio_or_similar
-            # Base64 veya doğrudan bytes olarak gelen görseli yazıyoruz
-            import base64
-            image_bytes = base64.b64decode(generated_image.image.image_bytes)
             with open("arka_plan.jpg", "wb") as f:
-                f.write(image_bytes)
+                f.write(generated_image.image.image_bytes)
                 
         print("📸 Özel yapay zeka görseli Gemini Imagen ile 'arka_plan.jpg' olarak başarıyla kaydedildi.")
         return True
@@ -99,12 +95,10 @@ def videoyu_olustur():
     """Görseli, sesi ve müziği birleştirerek dikey video üretir (FFmpeg)."""
     print("🎬 Video montajı (Görsel + Ses + Müzik) başlıyor...")
     
-    # Dosyaların varlığını kontrol et
     if not os.path.exists("arka_plan.jpg") or not os.path.exists("ses.mp3"):
         print("❌ Eksik dosya var, video birleştirilemiyor!")
         return
 
-    # Müzik yoksa sadece sesle birleştir, varsa ikisini miksle
     if os.path.exists("muzik.mp3"):
         komut = (
             "ffmpeg -y -loop 1 -i arka_plan.jpg -i muzik.mp3 -i ses.mp3 "
