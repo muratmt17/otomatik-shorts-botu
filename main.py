@@ -2,6 +2,7 @@ import os
 import asyncio
 import requests
 import json
+import subprocess
 from google import genai
 from google.genai import types
 import edge_tts
@@ -47,7 +48,6 @@ def viral_shorts_ureti():
 def yapay_zeka_gorseli_uret(prompt):
     """Sınırsız Pollinations AI motorunu kullanarak sinematik 9:16 dikey görsel üretir."""
     temiz_prompt = requests.utils.quote(prompt)
-    # Daha sanatsal ve gelişmiş olan "flux" modelini zorunlu kılıyoruz
     url = f"https://image.pollinations.ai/p/{temiz_prompt}?width=720&height=1280&nologo=true&private=true&model=flux"
     
     print(f"🎨 Sinematik görsel üretiliyor... Model: Flux")
@@ -70,47 +70,48 @@ async def metni_seslendir(metin, cikis_ses_yolu):
     await communicate.save(cikis_ses_yolu)
     print(f"🔊 Ses dosyası oluşturuldu.")
 
-def hazir_muzik_indir():
-    """Arka plana koymak için telifsiz kısa bir fon müziği indirir."""
-    muzik_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-    try:
-        response = requests.get(muzik_url, timeout=15)
-        with open("muzik.mp3", "wb") as f:
-            f.write(response.content)
-        print("✅ Müzik hazır.")
-    except Exception:
-        print("Müzik indirilemedi, videoya müziksiz devam edilecek.")
-
 def videoyu_olustur(baslik):
-    """Görseli, sesi, müziği ve VİDEO ÜZERİNE METNİ (Kanca Başlık) birleştirir."""
+    """Görseli, seslendirmeyi ve Kanca Başlığı (müziksiz) birleştirir."""
     print(f"🎬 Video montajı ve yazı ekleme başladı... Başlık: {baslik}")
     
     if not os.path.exists("arka_plan.jpg") or not os.path.exists("ses.mp3"):
         print("❌ Eksik kaynak dosyası!")
         return
 
-    # FFmpeg üzerinde videonun üst-orta kısmına büyük, kalın, siyah gölgeli beyaz yazı ekleme filtresi
-    # Satır kırılmalarında hata olmaması için başlığı temizliyoruz
-    temiz_baslik = baslik.replace("'", "").replace('"', '').upper()
+    # FFmpeg kaçış karakteri (escape) ve tırnak sorunlarını engellemek için temizlik
+    temiz_baslik = baslik.replace("'", "").replace('"', '').replace(':', '\\:').upper()
     
+    # GitHub Actions Ubuntu ortamında standart olarak bulunan güvenli font yolu
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    font_arg = f":fontfile={font_path}" if os.path.exists(font_path) else ""
+
+    # Dikey video formatında (9:16) başlığı üst-orta kısma ortalayan drawtext filtresi
     yazi_filtresi = (
-        f"scale=720:1280,drawtext=text='{temiz_baslik}':fontcolor=white:fontsize=48:"
-        f"font='Sans':x=(w-text_w)/2:y=(h-text_h)/4:box=1:boxcolor=black@0.6:boxborderw=20"
+        f"scale=720:1280,drawtext=text='{temiz_baslik}'{font_arg}:fontcolor=white:fontsize=44:"
+        f"x=(w-text_w)/2:y=(h-text_h)/4:box=1:boxcolor=black@0.6:boxborderw=20"
     )
 
-    if os.path.exists("muzik.mp3"):
-        komut = (
-            f"ffmpeg -y -loop 1 -framerate 25 -i arka_plan.jpg -i muzik.mp3 -i ses.mp3 "
-            f"-filter_complex \"[0:v]{yazi_filtresi}[v]; [1:a]volume=0.07[bg]; [2:a]volume=1.0[voice]; [bg][voice]amix=inputs=2:duration=shortest[a]\" "
-            f"-map \"[v]\" -map \"[a]\" -c:v libx264 -pix_fmt yuv420p -shortest final_shorts.mp4"
-        )
-    else:
-        komut = (
-            f"ffmpeg -y -loop 1 -framerate 25 -i arka_plan.jpg -i ses.mp3 "
-            f"-vf \"{yazi_filtresi}\" -map 0:v -map 1:a -c:v libx264 -pix_fmt yuv420p -shortest final_shorts.mp4"
-        )
+    # subprocess için list formatında güvenli FFmpeg komutu
+    # '-nostdin' ile arka planda input bekleyip donması kesin olarak engellenir.
+    komut = [
+        "ffmpeg", "-y", "-nostdin",
+        "-loop", "1", "-framerate", "25", "-i", "arka_plan.jpg",
+        "-i", "ses.mp3",
+        "-vf", yazi_filtresi,
+        "-map", "0:v", "-map", "1:a",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-shortest", "final_shorts.mp4"
+    ]
         
-    os.system(komut)
+    try:
+        print("FFmpeg işlemi başlatılıyor...")
+        # GitHub Actions'ın donup kalmaması için 180 saniyelik bir işlem üst limiti (timeout) ekledik
+        result = subprocess.run(komut, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=180)
+        if result.returncode != 0:
+            print(f"FFmpeg Hatası:\n{result.stderr}")
+    except subprocess.TimeoutExpired:
+        print("❌ FFmpeg işlemi zaman aşımına uğradı!")
+    except Exception as e:
+        print(f"FFmpeg çalıştırılırken hata: {e}")
     
     if os.path.exists("final_shorts.mp4") and os.path.getsize("final_shorts.mp4") > 100000:
         print("🎉 KANCA BAŞLIKLI VİDEO BAŞARIYLA ÜRETİLDİ!")
@@ -135,10 +136,7 @@ async def ana_akis():
     print("🤖 3. ADIM: Seslendirme yapılıyor...")
     await metni_seslendir(senaryo, "ses.mp3")
     
-    print("🤖 4. ADIM: Müzik hazırlanıyor...")
-    hazir_muzik_indir()
-    
-    print("🤖 5. ADIM: FFmpeg ile Başlık Videoya işleniyor...")
+    print("🤖 4. ADIM: FFmpeg ile Başlık Videoya işleniyor...")
     videoyu_olustur(baslik)
 
 if __name__ == "__main__":
