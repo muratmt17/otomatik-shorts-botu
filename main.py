@@ -8,25 +8,25 @@ from google.genai import types
 import edge_tts
 
 def viral_shorts_ureti():
-    """Gemini API kullanarak senaryo, sinematik görsel promptu ve video içi başlık üretir."""
+    """Gemini API kullanarak senaryo, profesyonel yazı entegreli sinematik görsel promptu üretir."""
     api_key = os.environ.get("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
 
     sistem_talimati = (
-        "Sen YouTube Shorts ve TikTok üzerinde milyonlarca izlenen bir içerik üreticisisin. "
+        "Sen YouTube Shorts ve TikTok üzerinde milyonlarca izlenen, profesyonel bir içerik üreticisisin. "
         "Görevin; tarih, gizem, bilim veya psikoloji hakkında izleyiciyi ekrana kilitleyecek "
-        "maksimum 25 saniyelik bir Shorts içeriği tasarlamaktır."
+        "maksimum 25 saniyelik bir Shorts içeriği tasarlamaktır. Görsellerin estetiği mükemmel olmalı."
     )
 
     kullanici_promptu = (
-        "Bana bugün için viral olacak çok şaşırtıcı bir konu seç.\n"
+        "Bana bugün için viral olacak çok şaşırtıcı ve spesifik bir konu seç.\n"
         "Bana tam olarak şu JSON formatında cevap ver (başka hiçbir metin ekleme, sadece saf JSON dön):\n"
         "{\n"
-        '  "baslik": "Videonun üzerine büyük harflerle yazılacak, maksimum 3-4 kelimelik, ŞOK EDİCİ Türkçe kanca başlık (Örn: BU BİLGİ YASAKLANDI!)",\n'
+        '  "baslik": "Videonun üzerine profesyonelce yazılacak, maksimum 3-4 kelimelik, ŞOK EDİCİ Türkçe kanca başlık (Örn: HAFIZAN SANA İHANET EDİYOR!)",\n'
         '  "senaryo": "İlk 3 saniyesi kancalı, merak uyandırıcı, akıcı, en sonda izleyiciyi yorum yapmaya davet eden Türkçe seslendirme metni.",\n'
-        '  "gorsel_promptu": "A hyper-realistic, dramatic vertical (9:16) cinematic masterpiece depicting the scene. Epic composition, volumetric lighting, dark moody atmosphere, award-winning photography, 8k resolution, highly detailed textures, Unreal Engine 5 render style, no text inside image."\n'
+        '  "gorsel_prompt_konu": "Bu konuyu tasvir eden hyper-realistic, dramatic vertical cinematic masterpiece sahnesinin sadece İngilizce görsel detayları (Arka plan, atmosfer, aydınlatma, nesneler)." \n'
         "}\n\n"
-        "Not: 'gorsel_promptu' kısmına benim verdiğim şablonun üzerine konuyu tasvir eden İngilizce detayları da ekle."
+        "Not: 'baslik' kısmını İngilizceye çevirme, Türkçe kalsın."
     )
 
     try:
@@ -40,23 +40,38 @@ def viral_shorts_ureti():
             )
         )
         data = json.loads(response.text)
-        return data["baslik"], data["senaryo"], data["gorsel_promptu"]
+        return data["baslik"], data["senaryo"], data["gorsel_prompt_konu"]
     except Exception as e:
         print(f"Gemini API Hatası: {e}")
         return None, None, None
 
-def yapay_zeka_gorseli_uret(prompt):
-    """Sınırsız Pollinations AI motorunu kullanarak sinematik 9:16 dikey görsel üretir."""
-    temiz_prompt = requests.utils.quote(prompt)
+def yapay_zeka_gorseli_uret(baslik, prompt_konu):
+    """
+    Sınırsız Pollinations AI motorunu kullanarak,
+    Kanca Başlığı doğrudan görselin içine profesyonelce yerleştirilmiş dikey görsel üretir.
+    """
+    
+    # Gemini'den gelen konuyu ve Türkçe başlığı birleştirip profesyonel bir metin entegrasyonu promptu oluşturuyoruz.
+    # Bu aşama, image_0.png'deki gibi bir siyah bant yerine, yazıyı sahnenin bir parçası yapar.
+    temiz_baslik = baslik.replace("'", "").replace('"', '').upper()
+    gorsel_prompt = (
+        f"A hyper-realistic, dramatic vertical (9:16) cinematic masterpiece depicting {prompt_konu}. "
+        f"Epic composition, volumetric lighting, dark moody atmosphere, award-winning photography, 8k resolution. "
+        f"Integrate the following text in large, bold, clean, white sans-serif lettering near the top-middle third of the image, "
+        f"avoiding any dark background bars, styled as professional movie title graphics: '{temiz_baslik}'. "
+        f"Ensure perfect spelling of the Turkish text and that it's readable but not distracting."
+    )
+    
+    temiz_prompt = requests.utils.quote(gorsel_prompt)
     url = f"https://image.pollinations.ai/p/{temiz_prompt}?width=720&height=1280&nologo=true&private=true&model=flux"
     
-    print(f"🎨 Sinematik görsel üretiliyor... Model: Flux")
+    print(f"🎨 Profesyonel görsel üretiliyor (Metin entegreli)... Başlık: {baslik}")
     try:
-        response = requests.get(url, timeout=40)
+        response = requests.get(url, timeout=60) # Yazı üretimi bazen biraz daha uzun sürebilir.
         if response.status_code == 200 and len(response.content) > 5000:
             with open("arka_plan.jpg", "wb") as f:
                 f.write(response.content)
-            print("📸 Sinematik dikey görsel başarıyla kaydedildi.")
+            print("📸 Profesyonel dikey görsel (metinli) başarıyla kaydedildi.")
             return True
         return False
     except Exception as e:
@@ -70,41 +85,27 @@ async def metni_seslendir(metin, cikis_ses_yolu):
     await communicate.save(cikis_ses_yolu)
     print(f"🔊 Ses dosyası oluşturuldu.")
 
-def videoyu_olustur(baslik):
-    """Görseli, seslendirmeyi ve Kanca Başlığı (müziksiz) birleştirir."""
-    print(f"🎬 Video montajı ve yazı ekleme başladı... Başlık: {baslik}")
+def videoyu_olustur():
+    """Görseli (zaten metni içeriyor) ve seslendirmeyi birleştirir."""
+    print(f"🎬 Video montajı başladı (Müziksiz ve sade)...")
     
     if not os.path.exists("arka_plan.jpg") or not os.path.exists("ses.mp3"):
         print("❌ Eksik kaynak dosyası!")
         return
 
-    # FFmpeg kaçış karakteri (escape) ve tırnak sorunlarını engellemek için temizlik
-    temiz_baslik = baslik.replace("'", "").replace('"', '').replace(':', '\\:').upper()
-    
-    # GitHub Actions Ubuntu ortamında standart olarak bulunan güvenli font yolu
-    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    font_arg = f":fontfile={font_path}" if os.path.exists(font_path) else ""
-
-    # Dikey video formatında (9:16) başlığı üst-orta kısma ortalayan drawtext filtresi
-    yazi_filtresi = (
-        f"scale=720:1280,drawtext=text='{temiz_baslik}'{font_arg}:fontcolor=white:fontsize=44:"
-        f"x=(w-text_w)/2:y=(h-text_h)/4:box=1:boxcolor=black@0.6:boxborderw=20"
-    )
-
-    # subprocess için list formatında güvenli FFmpeg komutu
-    # '-nostdin' ile arka planda input bekleyip donması kesin olarak engellenir.
+    # FFmpeg komutu artık çok basit; sadece görseli ve sesi birleştiriyoruz.
+    # VF filtresi artık drawtext içermiyor, sadece doğru boyuta scale ediyor.
     komut = [
         "ffmpeg", "-y", "-nostdin",
         "-loop", "1", "-framerate", "25", "-i", "arka_plan.jpg",
         "-i", "ses.mp3",
-        "-vf", yazi_filtresi,
+        "-vf", "scale=720:1280", # Boyutu koru
         "-map", "0:v", "-map", "1:a",
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-shortest", "final_shorts.mp4"
     ]
         
     try:
         print("FFmpeg işlemi başlatılıyor...")
-        # GitHub Actions'ın donup kalmaması için 180 saniyelik bir işlem üst limiti (timeout) ekledik
         result = subprocess.run(komut, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=180)
         if result.returncode != 0:
             print(f"FFmpeg Hatası:\n{result.stderr}")
@@ -114,30 +115,32 @@ def videoyu_olustur(baslik):
         print(f"FFmpeg çalıştırılırken hata: {e}")
     
     if os.path.exists("final_shorts.mp4") and os.path.getsize("final_shorts.mp4") > 100000:
-        print("🎉 KANCA BAŞLIKLI VİDEO BAŞARIYLA ÜRETİLDİ!")
+        print("🎉 VİDEO BAŞARIYLA ÜRETİLDİ VE METNİ GÖRSELİN İÇİNDE!")
     else:
         print("❌ FFmpeg video oluşturamadı.")
 
 async def ana_akis():
-    print("🤖 1. ADIM: Bilgi, Başlık ve Sinematik Görsel Konsepti üretiliyor...")
-    baslik, senaryo, gorsel_prompt = viral_shorts_ureti()
+    print("🤖 1. ADIM: Bilgi ve Profesyonel Görsel Konsepti üretiliyor...")
+    baslik, senaryo, gorsel_prompt_konu = viral_shorts_ureti()
     
-    if not baslik or not senaryo or not gorsel_prompt:
+    if not baslik or not senaryo or not gorsel_prompt_konu:
         print("❌ Gemini içerik üretemedi.")
         return
         
-    print(f"\n💥 Kanca Başlık: {baslik}")
+    print(f"\n💥 Kanca Başlık (Yazılacak): {baslik}")
     print(f"📝 Senaryo: {senaryo}")
-    print(f"🖼️ Gelişmiş Görsel Promptu: {gorsel_prompt}\n")
+    print(f"🖼️ Görsel Konu Promptu: {gorsel_prompt_konu}\n")
     
-    print("🤖 2. ADIM: Profesyonel Flux dikey görseli üretiliyor...")
-    if not yapay_zeka_gorseli_uret(gorsel_prompt): return
+    print("🤖 2. ADIM: Metin entegreli Profesyonel Flux görseli üretiliyor...")
+    # Artık başlığı ve konuyu görsel üretme fonksiyonuna birlikte veriyoruz.
+    if not yapay_zeka_gorseli_uret(baslik, gorsel_prompt_konu): return
     
     print("🤖 3. ADIM: Seslendirme yapılıyor...")
     await metni_seslendir(senaryo, "ses.mp3")
     
-    print("🤖 4. ADIM: FFmpeg ile Başlık Videoya işleniyor...")
-    videoyu_olustur(baslik)
+    print("🤖 4. ADIM: FFmpeg ile nihai video paketleniyor...")
+    # Videoyu oluştururken artık başlığı vermiyoruz, zaten görselde var.
+    videoyu_olustur()
 
 if __name__ == "__main__":
     asyncio.run(ana_akis())
